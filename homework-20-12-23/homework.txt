@@ -1,0 +1,9 @@
+1.write script for 3rd point of previous homework: https://devopscourseacahti.slack.com/archives/C068RDWDM7G/p1702488659454929
+
+2.write cleanup script which will delete all recourses from 1st point
+
+3. implement tagging mechanism for cleanup:
+f.e. do not delete recourses with usage:permanent tag
+
+4. tag all recources that you dont want to delete
+f.e default vpc + networking + general ec2 instance
