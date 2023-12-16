@@ -2,7 +2,7 @@
 Devops Hti 2023 course Homework repo
 
 
-Find corresponding Homework directory.
+Find corresponding Homework directory.Homework requirements are in homework.txt file
 
 Create branch for your homework.
 
