@@ -3,9 +3,9 @@
 
 vpc_cidr_block="10.0.0.0/16"
 subnet_cidr_block="10.0.1.0/24"
-region="eu-north-1"
-ami_id="ami-xxxxxxxxxxxx"  # Replace with your desired AMI ID
-instance_type="t3.micro"
+region="us-east-1"
+ami_id="ami-xxxxxxxxxxx"  # Replace with your desired AMI ID
+instance_type="t2.micro"
 key_pair="virtual_machine"
 
 # Create VPC
@@ -45,15 +45,24 @@ aws ec2 authorize-security-group-ingress --group-id $security_group_id --protoco
 aws ec2 authorize-security-group-ingress --group-id $security_group_id --protocol all --port all --cidr 0.0.0.0/0
 
 # Launch EC2 instance
-instance_id=$(aws ec2 run-instances --image-id $ami_id --instance-type $instance_type --subnet-id $subnet_id --security-group-ids $security_group_id --key-name $key_pair --query 'Instances[0].InstanceId' --output text)
+instance_id=$(aws ec2 run-instances --image-id $ami_id --instance-type $instance_type --subnet-id $subnet_id --security-group-ids $security_group_id --key-name $key_pair --query 'Instances>
 echo "EC2 instance launched with ID: $instance_id"
 
 # Wait for the instance to be running
-aws ec2 wait instance-running --instance-ids $instance_id
+aws ec2 wait instance-running --instance-ids $instance_id --region $region
 
-# Get the public IP address of the instance
-public_ip=$(aws ec2 describe-instances --instance-ids $instance_id --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
-echo "Public IP address of the instance: $public_ip"
+# Allocate Elastic IP
+allocation_output=$(aws ec2 allocate-address --domain vpc --region $region)
+
+# Extract Allocation ID from the output
+allocation_id=$(echo $allocation_output | jq -r '.AllocationId')
+
+# Associate Elastic IP with EC2 instance
+aws ec2 associate-address --instance-id $instance_id --allocation-id $allocation_id --region $region
+
+echo "Elastic IP associated with EC2 instance $instance_id."
 
 # Tag resources with usage:permanent for cleanup exemption
-aws ec2 create-tags --resources $vpc_id $subnet_id $gateway_id $route_table_id $instance_id --tags Key=usage,Value=permanent
+aws ec2 create-tags --resources $vpc_id $subnet_id $gateway_id $route_table_id $instance_id $allocation_id  --tags Key=usage,Value=permanent
+
+
