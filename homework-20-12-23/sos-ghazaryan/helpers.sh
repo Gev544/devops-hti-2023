@@ -1,8 +1,9 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 
 function check {
     unset RESULT
     RESULT=$(${1})
+    echo $RESULT
     if [ "${2}" = "true" ]
     then
       if [ -z "${RESULT}" ]

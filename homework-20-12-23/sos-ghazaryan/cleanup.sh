@@ -8,9 +8,9 @@ function cleanResourcesByTag
   if [ -n "${2}" ]
   then
    cleanInstancesByTag ${1} ${2}
-   cleanRouteTables ${1} ${2}
-   cleanGateWays ${1} ${2}
+    cleanGateWays ${1} ${2}
    cleanSubnets ${1} ${2}
+   cleanRouteTables ${1} ${2}
    cleanSecurityGroups ${1} ${2}
    cleanVPCs ${1} ${2}
   fi
@@ -22,10 +22,9 @@ function cleanInstancesByTag
   # Get all instances
   instances=$(aws ec2 describe-instances --query 'Reservations[*].Instances[*]' --output json)
 
-  # Filter instances where tag value is not equal to EXCLUDE_TAG_VALUE
-  instances_to_delete=$(echo $instances | jq -r '.[][] | select(.Tags | any(.Key == "'${1}'" and .Value != "'${2}'")).InstanceId')
-
-  # Loop through each instance and terminate it
+#   Filter instances where tag value is not equal to EXCLUDE_TAG_VALUE
+  instances_to_delete=$(echo $instances | jq -r '.[][] | select(.Tags == null or (.Tags | any(.Key == "'${1}'" and .Value != "'${2}'"))).InstanceId')
+#   Loop through each instance and terminate it
   for instance_id in $instances_to_delete; do
       echo "Terminating instance $instance_id"
       aws ec2 terminate-instances --instance-ids $instance_id
@@ -34,16 +33,25 @@ function cleanInstancesByTag
 
 function cleanRouteTables
 {
-  # Get all instances
-    route_tables=$(aws ec2 describe-route-tables --query 'RouteTables[*]' --output json)
+  route_tables=$(aws ec2 describe-route-tables --query 'RouteTables[*]' --output json)
 
-    # Filter instances where tag value is not equal to EXCLUDE_TAG_VALUE
-    route_tables_to_delete=$(echo $route_tables | jq -r '.[] | select(.Tags | any(.Key == "'${1}'" and .Value != "'${2}'")).RouteTableId')
-    # Loop through each instance and terminate it
-    for id in $route_tables_to_delete; do
-        echo "Deleting route table $id"
-        aws ec2 delete-route-table --instance-ids $id
-    done
+  # Loop through the route tables
+  echo "$route_tables" | jq -c '.[]' | while read -r rt; do
+      # Check if it's a main route table
+      is_main=$(echo "$rt" | jq '.Associations[]? | select(.Main == true) | length')
+      if [[ "$is_main" -eq 0 ]]; then
+          # Get the tag value for the specified tag key, if it exists
+          tag_val=$(echo "$rt" | jq -r --arg KEY "$TAG_KEY" '.Tags[]? | select(.Key == $KEY).Value // empty')
+
+          # Check if the tag doesn't exist or its value is different
+          if [[ -z "$tag_val" || "$tag_val" != "$TAG_VALUE" ]]; then
+              # Print Route Table ID
+              rt_id=$(echo "$rt" | jq -r '.RouteTableId')
+              echo "Deleting route table $rt_id"
+               aws ec2 delete-route-table --route-table-id $rt_id
+          fi
+      fi
+  done
 }
 
 function detachGateway
@@ -53,21 +61,28 @@ function detachGateway
 
 function cleanGateWays
 {
-  internet_gateways_to_delete=$(aws ec2 describe-internet-gateways --output json | jq -r '[.InternetGateways[]  | select(.Tags | any(.Key == "'${1}'" and .Value != "'${2}'")) | {VpcId: .Attachments[0].VpcId, InternetGatewayId: .InternetGatewayId}]')
-  echo "$internet_gateways_to_delete" | jq -c '.[]' | while read -r gateway; do
-      vpc_id=$(echo "$gateway" | jq -r '.VpcId')
-      igw_id=$(echo "$gateway" | jq -r '.InternetGatewayId')
-      echo "Deleting internet gateway with vpc id $vpc_id and gateway id $igw_id"
-      detachGateway "${vpc_id}" "${igw_id}"
-      aws ec2 delete-internet-gateway --internet-gateway-id "${igw_id}"
+  internet_gateways=$(aws ec2 describe-internet-gateways --output json)
+
+  # Loop through the internet gateways
+  echo "$internet_gateways" | jq -c '.InternetGateways[]' | while read -r igw; do
+      # Check for the presence of the tag and get its value
+      tag_val=$(echo "$igw" | jq -r --arg KEY "${1}" '.Tags[] | select(.Key == $KEY).Value // empty')
+
+      # Conditions to determine if an internet gateway does not have the specified tag or tag value
+      if [[ -z "${2}" && -z "$tag_val" ]] || [[ -n "${2}" && "$tag_val" != "${2}" ]]; then
+          # Print Internet Gateway ID
+          igw_id=$(echo "$igw" | jq -r '.InternetGatewayId')
+          vpc_id=$(echo "$igw" | jq -r '.Attachments[0] | .VpcId')
+          detachGateway "${vpc_id}" "${igw_id}"
+          aws ec2 delete-internet-gateway --internet-gateway-id "${igw_id}"
+      fi
   done
 }
 
 function cleanSubnets {
     subnets=$(aws ec2 describe-subnets --query 'Subnets[*]' --output json)
     # Filter instances where tag value is not equal to EXCLUDE_TAG_VALUE
-    subnets_to_delete=$(echo $subnets | jq -r '.[] | select(.Tags | any(.Key == "'${1}'" and .Value != "'${2}'")).SubnetId')
-    echo $subnets_to_delete
+    subnets_to_delete=$(echo $subnets | jq -r '.[] | select(.Tags == null or (.Tags | any(.Key == "'${1}'" and .Value != "'${2}'"))).SubnetId')
     for id in $subnets_to_delete; do
         echo "Deleting subnets $id"
         aws ec2 delete-subnet --subnet-id $id
@@ -75,9 +90,10 @@ function cleanSubnets {
 }
 
 function cleanSecurityGroups {
-    groups=$(aws ec2 describe-security-groups --query 'SecurityGroups[*]' --output json)
+    groups=$(aws ec2 describe-security-groups --query 'SecurityGroups[?GroupName!=`default`]' --output json)
     # Filter instances where tag value is not equal to EXCLUDE_TAG_VALUE
-    groups_to_delete=$(echo $groups | jq -r '.[] | select(.Tags == null or (.Tags | any(.Key == "'${1}'" and .Value != "'${2}'"))).GroupId')
+      groups_to_delete=$(echo $groups | jq -r '.[] | select(.Tags == null or (.Tags | any(.Key == "'${1}'" and .Value != "'${2}'"))).GroupId')
+      echo $groups_to_delete
     for id in $groups_to_delete; do
         echo "Deleting security groups $id"
         aws ec2 delete-security-group --group-id $id
@@ -93,3 +109,8 @@ function cleanVPCs {
         aws ec2 delete-vpc --vpc-id $id
     done
 }
+
+TO_KEEP_TAG="usage"
+TO_KEEP_TAG_VALUE="permanent"
+
+cleanResourcesByTag  "${TO_KEEP_TAG}" "${TO_KEEP_TAG_VALUE}"
