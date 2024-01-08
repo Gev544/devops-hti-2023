@@ -3,7 +3,7 @@
 vpc_cidr_block="10.0.0.0/16"
 subnet_cidr_block="10.0.1.0/24"
 region="us-east-1"
-ami_id="ami-0c7217cdde317cfec"  # Replace with your desired AMI ID
+ami_id="ami-xxxxxxxxxxx" # Replace with your desired AMI ID
 instance_type="t2.micro"
 key_pair="machine"
 
