@@ -27,7 +27,8 @@ function cleanInstancesByTag
 #   Loop through each instance and terminate it
   for instance_id in $instances_to_delete; do
       echo "Terminating instance $instance_id"
-      aws ec2 wait terminate-instances --instance-ids $instance_id
+      aws ec2 terminate-instances --instance-ids $instance_id
+      aws ec2 wait instance-terminated --instance-ids $instance_id
   done
 }
 
