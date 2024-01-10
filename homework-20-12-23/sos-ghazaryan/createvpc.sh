@@ -42,4 +42,6 @@ unset INSTANCE_ID
 check "aws ec2 run-instances --image-id ami-0533f2ba8a1995cf9 --instance-type t2.micro --count 1 --subnet-id ${SUBNET_ID} --security-group-ids ${SECURITY_GROUP_ID} --associate-public-ip-address --key-name cli-keyPair --query Instances[0].InstanceId --output text" true RESULT
 INSTANCE_ID=$RESULT
 
+check "aws ec2 create-tags --resources ${INSTANCE_ID}  ${ROUTE_TABLE_ID} ${GETWAY_ID} ${SUBNET_ID} ${SECURITY_GROUP_ID} ${VPC_ID} --tags Key=usage,Value=temp" false
+
 
