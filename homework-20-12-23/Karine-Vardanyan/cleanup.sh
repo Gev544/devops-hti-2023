@@ -5,7 +5,7 @@ delete_ec2_instances() {
   region=$1
   vpc_id=$2
 
-  aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,VpcId,PublicIpAddress,Tags[?Key=='Usage' && Value=='permanent']]" \
+  aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,VpcId,PublicIpAddress,Tags[?Key=='usage' && Value=='permanent']]" \
     --output text --region $region | \
   while read -r instance_id vpc public_ip permanent_tag; do
     if [ "$vpc" == "$vpc_id" ] && [ "$permanent_tag" == "None" ]; then
@@ -35,7 +35,7 @@ delete_security_group_with_retries() {
   while [ $retries -gt 0 ]; do
     if aws ec2 delete-security-group --group-id $group_id --region $region; then
       echo "Security Group $group_id deleted successfully."
-	        break
+	  break
     else
       echo "Failed to delete Security Group $group_id. Retrying..."
       ((retries--))
@@ -55,12 +55,12 @@ cleanup_vpcs() {
 
 
  # Get all VPCs
- vpc_ids=($(aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,Tags[?Key=='Usage' && Value=='permanent']]' --output text --region $region | \
+ vpc_ids=($(aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,Tags[?Key=='usage' && Value=='permanent']]' --output text --region $region | \
     grep -E '^vpc-' | awk '{print $1}'))
 
 
   for vpc_id in "${vpc_ids[@]}"; do
-    permanent_tag=$(aws ec2 describe-vpcs --vpc-ids "$vpc_id" --query "Vpcs[*].Tags[?Key=='Usage' && Value=='permanent'].Value" --output text --region "$region")
+    permanent_tag=$(aws ec2 describe-vpcs --vpc-ids "$vpc_id" --query "Vpcs[*].Tags[?Key=='usage' && Value=='permanent'].Value" --output text --region "$region")
 	if [ -z "$permanent_tag" ]; then
 		# Get all instances and terminate them
 		delete_ec2_instances $region $vpc_id
