@@ -5,19 +5,22 @@ delete_ec2_instances() {
   region=$1
   vpc_id=$2
 
-  # Use process substitution instead of a pipe
-  aws ec2 describe-instances --query 'Reservations[*].Instances[*].[InstanceId,VpcId,PublicIpAddress]' --output text --region $region | \
-  while read -r instance_id vpc public_ip; do
-    if [ "$vpc" == "$vpc_id" ]; then
+  aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,VpcId,PublicIpAddress,Tags[?Key=='Usage' && Value=='permanent']]" \
+    --output text --region $region | \
+  while read -r instance_id vpc public_ip permanent_tag; do
+    if [ "$vpc" == "$vpc_id" ] && [ "$permanent_tag" == "None" ]; then
       allocation_id=$(aws ec2 describe-addresses --public-ips $public_ip --query 'Addresses[*].AllocationId' --output text --region $region)
-	  echo "Terminating instance: $instance_id"
       aws ec2 terminate-instances --instance-ids $instance_id --region $region
-
+	  echo "EC2 instance $instance_id terminated successfully."
+	  
       if [ -n "$public_ip" ]; then
-        echo "Releasing Elastic IP: $public_ip"
         aws ec2 disassociate-address --association-id $(aws ec2 describe-addresses --public-ips $public_ip --query 'Addresses[*].AssociationId' --output text --region $region) --region $region
         aws ec2 release-address --allocation-id $allocation_id --region $region
+		echo "EC2 instance $public_ip released successfully."
       fi
+	  
+    else
+       echo "Skipping termination of permanent instance: $instance_id"
     fi
   done
 }
@@ -32,7 +35,7 @@ delete_security_group_with_retries() {
   while [ $retries -gt 0 ]; do
     if aws ec2 delete-security-group --group-id $group_id --region $region; then
       echo "Security Group $group_id deleted successfully."
-      break
+	        break
     else
       echo "Failed to delete Security Group $group_id. Retrying..."
       ((retries--))
@@ -51,49 +54,61 @@ cleanup_vpcs() {
   region=$1
 
 
- # Get all VPCs 
-  vpc_ids=($(aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId]' --output text --region $region))
+ # Get all VPCs
+ vpc_ids=($(aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,Tags[?Key=='Usage' && Value=='permanent']]' --output text --region $region | \
+    grep -E '^vpc-' | awk '{print $1}'))
 
-echo $vpc_ids
+
   for vpc_id in "${vpc_ids[@]}"; do
+    permanent_tag=$(aws ec2 describe-vpcs --vpc-ids "$vpc_id" --query "Vpcs[*].Tags[?Key=='Usage' && Value=='permanent'].Value" --output text --region "$region")
+	if [ -z "$permanent_tag" ]; then
+		# Get all instances and terminate them
+		delete_ec2_instances $region $vpc_id
 
-    # Get all instances and terminate them
-    delete_ec2_instances $region $vpc_id
+		# Delete security groups excluding the default security group
+		security_group_ids=($(aws ec2 describe-security-groups --query "SecurityGroups[?VpcId=='$vpc_id' && GroupName!='default'].GroupId" --output text --region $region))
+		for group_id in "${security_group_ids[@]}"; do
+			delete_security_group_with_retries $group_id
+		done
+		
+		sleep 2
 
-    # Delete security groups excluding the default security group
-    security_group_ids=($(aws ec2 describe-security-groups --query "SecurityGroups[?VpcId=='$vpc_id' && GroupName!='default'].GroupId" --output text --region $region))
-    for group_id in "${security_group_ids[@]}"; do
+		# Delete subnets
+		subnet_ids=($(aws ec2 describe-subnets --query "Subnets[?VpcId=='$vpc_id'].SubnetId" --output text --region $region))
+		for subnet_id in "${subnet_ids[@]}"; do
+		  # Delete subnet
+		  route_table_id=$(aws ec2 describe-route-tables --query "RouteTables[?Associations[0].SubnetId=='$subnet_id'].RouteTableId" --output text --region $region)
+		  aws ec2 delete-subnet --subnet-id $subnet_id
+		  echo "Subnet $subnet_id deleted successfully."
+		  sleep 2
+		  # Delete route table associated with the subnet
+		  aws ec2 delete-route-table --route-table-id $route_table_id
+		  echo "Route table $route_table_id deleted successfully." 
+		done
 	
-	aws ec2 delete-security-group --group-id $group_id --region $region
-	echo $group_id
-	delete_security_group_with_retries $group_id
-
-    done
-        sleep 2
-
-    # Delete subnets
-    subnet_ids=($(aws ec2 describe-subnets --query "Subnets[?VpcId=='$vpc_id'].SubnetId" --output text --region $region))
-    for subnet_id in "${subnet_ids[@]}"; do
-      # Delete subnet
-      route_table_id=$(aws ec2 describe-route-tables --query "RouteTables[?Associations[0].SubnetId=='$subnet_id'].RouteTableId" --output text --region $region)
-      aws ec2 delete-subnet --subnet-id $subnet_id
-	echo $subnet_id
-        sleep 2
-      # Delete route table associated with the subnet
-	echo $route_table_id
-      aws ec2 delete-route-table --route-table-id $route_table_id
-    done
-        sleep 2
-    # Detach internet gateways
-    igw_ids=($(aws ec2 describe-internet-gateways --query "InternetGateways[?Attachments[0].VpcId=='$vpc_id'].InternetGatewayId" --output text --region $region))
-    for igw_id in "${igw_ids[@]}"; do
-      aws ec2 detach-internet-gateway --internet-gateway-id $igw_id --vpc-id $vpc_id
-      aws ec2 delete-internet-gateway --internet-gateway-id $igw_id
-    done
-        sleep 10
-    # Delete VPC
-    aws ec2 delete-vpc --vpc-id $vpc_id --region $region
+		sleep 2
+		
+		# Detach internet gateways
+		igw_ids=($(aws ec2 describe-internet-gateways --query "InternetGateways[?Attachments[0].VpcId=='$vpc_id'].InternetGatewayId" --output text --region $region))
+		for igw_id in "${igw_ids[@]}"; do
+		  aws ec2 detach-internet-gateway --internet-gateway-id $igw_id --vpc-id $vpc_id
+		  aws ec2 delete-internet-gateway --internet-gateway-id $igw_id
+		  echo "Internet Gateway $igw_id deleted successfully."
+		done
+		
+		sleep  2
+		
+		# Delete VPC
+		aws ec2 delete-vpc --vpc-id $vpc_id --region $region
+		echo "VPC $igw_id deleted successfully."
+		
+	else
+		echo "Skipping deletion of permanent VPC: $vpc_id"
+	fi
   done
 }
 
 cleanup_vpcs "us-east-1"
+
+
+
