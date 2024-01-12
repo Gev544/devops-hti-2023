@@ -16,7 +16,7 @@ delete_ec2_instances() {
       if [ -n "$public_ip" ]; then
         aws ec2 disassociate-address --association-id $(aws ec2 describe-addresses --public-ips $public_ip --query 'Addresses[*].AssociationId' --output text --region $region) --region $region
         aws ec2 release-address --allocation-id $allocation_id --region $region
-		echo "EC2 instance $public_ip released successfully."
+		echo "Elastic IP $public_ip released successfully."
       fi
 	  
     else
