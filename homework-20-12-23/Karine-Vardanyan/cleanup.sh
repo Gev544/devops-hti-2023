@@ -100,7 +100,7 @@ cleanup_vpcs() {
 		
 		# Delete VPC
 		aws ec2 delete-vpc --vpc-id $vpc_id --region $region
-		echo "VPC $igw_id deleted successfully."
+		echo "VPC $vpc_id deleted successfully."
 		
 	else
 		echo "Skipping deletion of permanent VPC: $vpc_id"
