@@ -13,7 +13,8 @@ services:
     build:
       context: ./backend
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
 
@@ -26,4 +27,8 @@ services:
       - ./passwords:/passwords
     ports:
       - "3306:3306"
-
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 --password="$$(cat /passwords/mysql-root-password.txt)" --silent']
+      interval: 3s
+      retries: 5
+      start_period: 30s
