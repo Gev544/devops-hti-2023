@@ -1,0 +1,29 @@
+version: '3'
+
+services:
+  proxy:
+    build:
+      context: ./proxy
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+  db:
+    build:
+      context: ./db
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /passwords/mysql-root-password.txt
+    volumes:
+      - ./passwords:/passwords
+    ports:
+      - "3306:3306"
+
