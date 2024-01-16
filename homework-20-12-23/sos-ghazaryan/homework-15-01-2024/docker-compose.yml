@@ -29,4 +29,4 @@ services:
       retries: 5
       start_period: 30s
     env_file:
-      - path: .env
+      - path: '.env'
