@@ -1,6 +1,6 @@
 FROM ubuntu:20.04
 
 RUN apt-get update
-RUN apt-get install -y mariadb-server
+RUN apt-get install -y mysql-server
 
-CMD ["mariadbd"]
+CMD ["mysql-server"]
