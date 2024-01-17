@@ -2,16 +2,7 @@
 
 ec2_instances=$(aws ec2 describe-instances --output json | jq '.Reservations[].Instances[] | select(.Tags[] | .Key == "usage" and .Value == "permanent" | not ) | .InstanceId' | tr -d '"' )
 
-function error_handler {
- 	if [ $? -eq 0 ]; then
-              echo " Succesful "
-        else
-              echo "Something went wrong with $1 $2"
-	      exit 1
-        fi
-
-}
-
+source error_handler.sh
 while read -r ec2_id
 do
 	if [ -z $ec2_id ]; then
@@ -22,11 +13,12 @@ do
 		echo " Terminating ec2 instances that does not have Key usage and Value permanent tags "
                 aws ec2 terminate-instances --instance-ids $ec2_id
 		error_handler $ec2_id ec2_terminate
+		echo "Waiting for the $ec2_id instance to have fully terminated"
+		aws ec2 wait instance-terminated --instance-ids $ec2_id
+
 	fi
 done <<< $ec2_instances
 
-echo "Sleeping for 30 seconds while waiting for instances to be fully terminated."
-sleep 30
 vpcs_to_delete=$(aws ec2 describe-vpcs --output json | jq -r '.Vpcs[] | select(.Tags[] | .Key == "usage" and .Value == "permanent" | not ) |  .VpcId' | tr -d '"')
 
 while read -r vpc_id
