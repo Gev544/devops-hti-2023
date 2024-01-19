@@ -1,0 +1,1 @@
+Do the homework: https://devopscourseacahti.slack.com/archives/C068RDWDM7G/p1702488659454929 completely with terraform.
