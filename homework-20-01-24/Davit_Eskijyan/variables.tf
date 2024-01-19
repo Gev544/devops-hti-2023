@@ -13,6 +13,12 @@ variable "aws_ami" {
 variable "aws_key_pair" {
   description = "AWS key pair name"
   type        = string
-  default     = "VM"
+  default     = "Frankfurt_Key"
+}
+
+variable "aws_instance_type" {
+  description = "AWS Instance Type"
+  type        = string
+  default     = "t2.micro"
 }
 

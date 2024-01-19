@@ -67,18 +67,14 @@ resource "aws_security_group" "my_sg" {
   }
 }
 
-resource "aws_instance" "my_instance" {
-  ami                  = var.aws_ami
-  instance_type        = "t2.micro"
-  subnet_id            = aws_subnet.public_subnet.id
-  vpc_security_group_ids = [aws_security_group.my_sg.id]
-  key_name             = var.aws_key_pair
+resource "aws_instance" "VM-Ubuntu_SRV" {
+    ami                  = var.aws_ami
+    instance_type        = var.aws_instance_type
+    subnet_id            = aws_subnet.public_subnet.id
+    vpc_security_group_ids = [aws_security_group.my_sg.id]
+    key_name             = var.aws_key_pair
+     tags = {
+      Name = "VM-Ubuntu_SRV"
+    }
+  }
   
-root_block_device {
-    volume_size = 30  
-  }
-  tags = {
-    Name = "my_instance"
-  }
-}
-
