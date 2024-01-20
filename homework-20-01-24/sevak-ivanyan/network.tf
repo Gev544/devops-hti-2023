@@ -1,15 +1,3 @@
-provider "aws" {
-  region = var.aws_region
-}
-
-resource "aws_vpc" "devops_hti_vpc" {
-  cidr_block = "10.0.0.0/16"
-
-  tags = {
-    Name = "Some Custom VPC"
-  }
-}
-
 resource "aws_subnet" "devops_hti_public_subnet" {
   vpc_id            = aws_vpc.devops_hti_vpc.id
   cidr_block        = "10.0.1.0/24"
@@ -28,7 +16,7 @@ resource "aws_internet_gateway" "devops_hti_ig" {
   }
 }
 
-resource "aws_route_table" "public_rt" {
+resource "aws_route_table" "devops_hti_public_rt" {
   vpc_id = aws_vpc.devops_hti_vpc.id
 
   route {
@@ -42,10 +30,10 @@ resource "aws_route_table" "public_rt" {
 }
 resource "aws_route_table_association" "devops_hti_public_rt_a" {
   subnet_id      = aws_subnet.devops_hti_public_subnet.id
-  route_table_id = aws_route_table.public_rt.id
+  route_table_id = aws_route_table.devops_hti_public_rt.id
 }
 
-resource "aws_security_group" "devops_hti_web_sg" {
+resource "aws_security_group" "devops_hti_aws_sg" {
   name   = "SSH"
   vpc_id = aws_vpc.devops_hti_vpc.id
 
@@ -61,19 +49,5 @@ resource "aws_security_group" "devops_hti_web_sg" {
     to_port     = 0
     protocol    = -1
     cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_instance" "web_instance" {
-  ami           = var.aws_ami
-  instance_type = "t2.micro"
-  key_name      = var.aws_key_pair
-
-  subnet_id                   = aws_subnet.devops_hti_public_subnet.id
-  vpc_security_group_ids      = [aws_security_group.devops_hti_web_sg.id]
-  associate_public_ip_address = true
-
-  tags = {
-    "Name" : "Devops Hti Instance"
   }
 }
