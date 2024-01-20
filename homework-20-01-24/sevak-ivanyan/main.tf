@@ -46,7 +46,7 @@ resource "aws_route_table_association" "devops_hti_public_rt_a" {
 }
 
 resource "aws_security_group" "web_sg" {
-  name   = "HTTP and SSH"
+  name   = "SSH"
   vpc_id = aws_vpc.devops_hti_vpc.id
 
   ingress {
