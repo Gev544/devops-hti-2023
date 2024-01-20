@@ -45,7 +45,7 @@ resource "aws_route_table_association" "devops_hti_public_rt_a" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-resource "aws_security_group" "web_sg" {
+resource "aws_security_group" "devops_hti_web_sg" {
   name   = "SSH"
   vpc_id = aws_vpc.devops_hti_vpc.id
 
@@ -65,15 +65,15 @@ resource "aws_security_group" "web_sg" {
 }
 
 resource "aws_instance" "web_instance" {
-  ami           = "ami-0fc5d935ebf8bc3bc"
+  ami           = var.aws_ami
   instance_type = "t2.micro"
-  key_name      = "sevak-aws.pem"
+  key_name      = var.aws_key_pair
 
   subnet_id                   = aws_subnet.devops_hti_public_subnet.id
-  vpc_security_group_ids      = [aws_security_group.web_sg.id]
+  vpc_security_group_ids      = [aws_security_group.devops_hti_web_sg.id]
   associate_public_ip_address = true
 
   tags = {
-    "Name" : "Instance"
+    "Name" : "Devops Hti Instance"
   }
 }
