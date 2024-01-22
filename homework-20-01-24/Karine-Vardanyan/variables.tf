@@ -15,3 +15,9 @@ variable "aws_key_pair" {
   type        = string
   default     = "machine"
 }
+
+variable "availability_zone" {
+  description = "The availability zone for the subnet"
+  type        = string
+  default     = "a"
+}
