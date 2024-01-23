@@ -37,7 +37,7 @@ def create_subnet(vpc_id):
 
         # Specify your subnet parameters
         subnet_params = {
-            'CidrBlock': '10.0.0.0/24',
+            'CidrBlock': '10.0.1.0/24',
             'VpcId': vpc_id,
             'TagSpecifications': [
                 {
