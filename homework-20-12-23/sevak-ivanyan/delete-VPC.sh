@@ -1,47 +1,69 @@
 #!/bin/bash
 
-region="us-east-1"
+ec2_instances=$(aws ec2 describe-instances --output json | jq -r '.Reservations[].Instances[] | select(.Tags[] | .Key == "usage" and .Value == "permanent" | not) | .InstanceId' | tr -d '"')
 
-allInstances=$(aws ec2 describe-instances --region $region --query 'Reservations[].Instances[].InstanceId' --output text)
+while read -r ec2_id
+do
+	if [ -z "$ec2_id" ]; then
+		break
+	elif [ "$(aws ec2 describe-instances --output json | jq -r '.Reservations[].Instances[] | select(.InstanceId == "'"$ec2_id"'") | .State.Name' | tr -d '"')" = "terminated" ]; then
+		:
+	else
+		echo "Terminating EC2 instances that do not have Key 'usage' and Value 'permanent' tags"
+		aws ec2 terminate-instances --instance-ids "$ec2_id"
+	fi
+done <<< "$ec2_instances"
 
-instancesToDelete=()
-for instanceId in $allInstances; do
-    if ! aws ec2 describe-instances --instance-ids $instanceId --region $region --query 'Reservations[].Instances[?Tags[?Key==`usage` && Value==`permanent`]].InstanceId' --output text | grep -q $instanceId; then
-        instancesToDelete+=($instanceId)
-    fi
-done
+echo "Sleeping for 30 seconds while waiting for instances to be fully terminated."
+sleep 30
 
-for instanceId in "${instancesToDelete[@]}"; do
-    echo "Terminating instance: $instanceId"
-    aws ec2 terminate-instances --instance-ids $instanceId --region $region
-done
+vpcs_to_delete=$(aws ec2 describe-vpcs --output json | jq -r '.Vpcs[] | select(.Tags[] | .Key == "usage" and .Value == "permanent" | not) | .VpcId' | tr -d '"')
 
-aws ec2 wait instance-terminated --instance-ids "${instancesToDelete[@]}" --region $region
+while read -r vpc_id
+do
+	if [ -z "$vpc_id" ]; then
+		echo "Did not find any VPCs"
+		break
+	else
+		igw=$(aws ec2 describe-internet-gateways --output json | jq -r '.InternetGateways[] | select(.Attachments[].VpcId == "'"$vpc_id"'") | .InternetGatewayId' | tr -d '"')
 
-vpcsToDelete=$(aws ec2 describe-instances --instance-ids "${instancesToDelete[@]}" --region $region --query 'Reservations[].Instances[].VpcId' --output text | sort -u)
+		if [ ! -z "$igw" ]; then
+			echo "Detaching Internet Gateway"
+			aws ec2 detach-internet-gateway --internet-gateway-id "$igw" --vpc-id "$vpc_id"
+			echo "Deleting Internet Gateway"
+			aws ec2 delete-internet-gateway --internet-gateway-id "$igw"
+		fi
 
+		# Subnet delete
+		subnets=$(aws ec2 describe-subnets --output json | jq -r '.Subnets[] | select(.VpcId == "'"$vpc_id"'") | .SubnetId' | tr -d '"')
+		while read -r subnet_id
+		do
+			if [ ! -z "$subnet_id" ]; then
+				echo "Deleting Subnet"
+				aws ec2 delete-subnet --subnet-id "$subnet_id"
+			fi
+		done <<< "$subnets"
 
-for vpcId in $vpcsToDelete; do
-    subnetIds=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpcId" --query 'Subnets[].SubnetId' --output text --region $region)
-    for subnetId in $subnetIds; do
-        echo "Deleting subnet: $subnetId"
-        aws ec2 delete-subnet --subnet-id $subnetId --region $region
-    done
+		# Delete route table
+		route_tables=$(aws ec2 describe-route-tables --output json | jq -r '.RouteTables[] | select(.VpcId == "'"$vpc_id"'") | .RouteTableId ' | tr -d '"')
+		while read -r rtbl_id
+		do
+			if [ ! -z "$rtbl_id" ]; then
+				echo "Deleting Route Table"
+				aws ec2 delete-route-table --route-table-id "$rtbl_id"
+			fi
+		done <<< "$route_tables"
 
-    routeTableIds=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$vpcId" --query 'RouteTables[].RouteTableId' --output text --region $region)
-    for routeTableId in $routeTableIds; do
-        echo "Deleting route table: $routeTableId"
-        aws ec2 delete-route-table --route-table-id $routeTableId --region $region
-    done
+		sec_groups=$(aws ec2 describe-security-groups --output json | jq -r '.SecurityGroups[] | select(.VpcId == "'"$vpc_id"'") | .GroupId' | tr -d '"')
+		while read -r sec_grp_id
+		do
+			if [ ! -z "$sec_grp_id" ]; then
+				echo "Deleting Security Groups"
+				aws ec2 delete-security-group --group-id "$sec_grp_id"
+			fi
+		done <<< "$sec_groups"
 
-    securityGroupIds=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$vpcId" --query 'SecurityGroups[].GroupId' --output text --region $region)
-    for securityGroupId in $securityGroupIds; do
-        echo "Deleting security group: $securityGroupId"
-        aws ec2 delete-security-group --group-id $securityGroupId --region $region
-    done
-
-    echo "Deleting VPC: $vpcId"
-    aws ec2 delete-vpc --vpc-id $vpcId --region $region
-done
-
-echo "Deletion script completed successfully"
+		echo "Deleting VPC $vpc_id"
+		aws ec2 delete-vpc --vpc-id "$vpc_id"
+	fi
+done <<< "$vpcs_to_delete"
