@@ -19,7 +19,7 @@ resource "aws_route_table_association" "public_1_rt" {
 resource "aws_subnet" "terraform_subnet" {
   vpc_id            = aws_vpc.terraform_vpc.id
   cidr_block        = "10.0.1.0/24"
-  availability_zone = "${var.aws_region}a"
+  availability_zone = "var.aws_region"
 
   tags = {
     Name = "Terraform Subnet"

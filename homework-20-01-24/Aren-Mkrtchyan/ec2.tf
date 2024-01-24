@@ -1,7 +1,7 @@
 resource "aws_instance" "app_server" {
-  ami           = "${var.ami_id}"
+  ami           = var.aim_image
   instance_type = "t2.micro"
-  key_name      = "${var.ssh_key}"
+  key_name      = var.aws_key_pair
 
   subnet_id                   = aws_subnet.terraform_subnet.id
   vpc_security_group_ids      = [aws_security_group.ssh_group.id]
