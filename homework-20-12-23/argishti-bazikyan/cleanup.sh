@@ -1,8 +1,6 @@
 #!/bin/bash -ex
 
-#source set_up.sh
-
-region="eu-north-1"
+region="us-east-1"
 
 # delete instances
 ec2_ids=$(aws ec2 describe-instances --query "Reservations[?!(Instances[0].Tags && Instances[0].Tags[?Key=='usage' && Value=='permanent'])].Instances[*].InstanceId" --output text --region="$region")
